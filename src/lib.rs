@@ -4,17 +4,19 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 
-use core::f32::consts::PI;
+use core::marker::PhantomData;
 
-use num_complex::{Complex, Complex32};
+use num_complex::Complex;
+use num_traits::{Float, FloatConst, Zero};
 
 /// Sliding DFT implementation.
 #[derive(Debug, Clone, Copy)]
-pub struct SlidingDft<ValuesBuffer, TransformedBuffer, CoefficientsStorage> {
+pub struct SlidingDft<ValuesBuffer, TransformedBuffer, CoefficientsStorage, F> {
     buffer: ValuesBuffer,
     transformed: TransformedBuffer,
     rotation_coefficients: CoefficientsStorage,
     begin_ptr: usize,
+    _float_type: PhantomData<F>,
 }
 
 /// Sliding DFT construction error.
@@ -72,12 +74,13 @@ impl core::fmt::Display for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
-impl<ValuesBuffer, TransformedBuffer, CoefficientsStorage>
-    SlidingDft<ValuesBuffer, TransformedBuffer, CoefficientsStorage>
+impl<ValuesBuffer, TransformedBuffer, CoefficientsStorage, F>
+    SlidingDft<ValuesBuffer, TransformedBuffer, CoefficientsStorage, F>
 where
-    ValuesBuffer: AsRef<[f32]> + AsMut<[f32]>,
-    TransformedBuffer: AsRef<[Complex32]> + AsMut<[Complex32]>,
-    CoefficientsStorage: AsRef<[Complex32]> + AsMut<[Complex32]>,
+    ValuesBuffer: AsRef<[F]> + AsMut<[F]>,
+    TransformedBuffer: AsRef<[Complex<F>]> + AsMut<[Complex<F>]>,
+    CoefficientsStorage: AsRef<[Complex<F>]> + AsMut<[Complex<F>]>,
+    F: Float + FloatConst,
 {
     /// Initializes the algorithm with the given buffers.
     ///
@@ -133,33 +136,37 @@ where
         );
         assert!(coefficients_storage.as_ref().len() <= values_buffer.as_ref().len() / 2);
 
-        let buffer_length_f32 = buffer_length as f32;
+        let two_pi = F::from(2usize).expect("This conversion never fails") * F::PI();
+        let buffer_length_float =
+            F::from(buffer_length).expect("We expect this conversion never fails");
         coefficients_storage
             .as_mut()
             .iter_mut()
             .enumerate()
             .for_each(|(omega, value)| {
-                *value = Complex::new(0., 2. * PI * (omega as f32) / buffer_length_f32).exp();
+                let omega: F = F::from(omega).expect("We expect this conversion never fails");
+                *value = Complex::<F>::new(F::zero(), two_pi * (omega / buffer_length_float)).exp();
             });
         Ok(Self {
             buffer: values_buffer,
             transformed: transformed_storage,
             begin_ptr: 0,
             rotation_coefficients: coefficients_storage,
+            _float_type: PhantomData,
         })
     }
 
     /// Zeroizes the internal buffers.
     pub fn zeroize(&mut self) {
-        self.buffer.as_mut().iter_mut().for_each(|v| *v = 0.);
+        self.buffer.as_mut().iter_mut().for_each(|v| *v = F::zero());
         self.transformed
             .as_mut()
             .iter_mut()
-            .for_each(|v| *v = Complex32::new(0., 0.));
+            .for_each(|v| *v = Complex::zero());
     }
 
     /// Adds a point to the DFT.
-    pub fn add_point(&mut self, value: f32) {
+    pub fn add_point(&mut self, value: F) {
         // Safety: we are sure that `self.begin_ptr` is always in range.
         let delta = value - unsafe { *self.buffer.as_ref().get_unchecked(self.begin_ptr) };
 
@@ -187,7 +194,7 @@ where
     }
 
     /// Returns a reference to the current transformed values.
-    pub fn transformed(&self) -> &[Complex32] {
+    pub fn transformed(&self) -> &[Complex<F>] {
         self.transformed.as_ref()
     }
 
