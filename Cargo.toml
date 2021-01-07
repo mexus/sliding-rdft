@@ -1,0 +1,20 @@
+[package]
+name = "sliding-rdft"
+version = "0.1.0"
+authors = ["mexus <gilaldpellaeon@gmail.com>"]
+edition = "2018"
+description = "Sliding discrete fourier transform library targeted at no-std environments"
+keywords = [ "nostd", "fourier", "sliding", "dft" ]
+license = "Apache-2.0/MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+num-complex = { version = "0.3", default-features = false, features = ["libm"] }
+
+[features]
+default = []
+std = []
+
+[package.metadata.docs.rs]
+features = ["std"]
